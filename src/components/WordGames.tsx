@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { HebrewWord } from '../data/words';
 import { WORDS } from '../data/words';
 import { useSpeech } from '../hooks/useSpeech';
@@ -18,64 +18,85 @@ const ENCOURAGING = [
 ];
 
 // ── Game A: Hear and pick the right spelling ──────────────────────────────────
+// Queue-based: wrong → moved to end, correct → removed. Done when queue empty.
 
 function GameHearWord({ onComplete }: { onComplete: (score: number) => void }) {
   const { speak } = useSpeech();
-  const [queue] = useState(() => shuffle(WORDS).slice(0, 8));
-  const [idx, setIdx] = useState(0);
-  const [score, setScore] = useState(0);
+  const POOL = 8;
+  const [queue, setQueue] = useState<HebrewWord[]>(() => shuffle(WORDS).slice(0, POOL));
+  const [totalCount] = useState(POOL);
+  const seenRef = useRef<Set<string>>(new Set());
+  const firstTryRef = useRef(0);
+  const [roundKey, setRoundKey] = useState(0);
+  const [choices, setChoices] = useState<HebrewWord[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
 
-  const current = queue[idx];
+  const mastered = totalCount - queue.length;
 
-  const choices = useCallback(() => {
-    const others = shuffle(WORDS.filter(w => w.id !== current.id)).slice(0, 3);
-    return shuffle([current, ...others]);
-  }, [current]);
-
-  const [opts] = useState(choices);
-  const [currentOpts, setCurrentOpts] = useState(opts);
+  useEffect(() => {
+    const cur = queue[0];
+    if (!cur) return;
+    const others = shuffle(WORDS.filter(w => w.id !== cur.id)).slice(0, 3);
+    setChoices(shuffle([cur, ...others]));
+    setSelected(null);
+    setTimeout(() => speak(cur.pronunciation), 300);
+  }, [roundKey]);
 
   const handlePick = (word: HebrewWord) => {
-    if (selected) return;
+    if (selected || !queue[0]) return;
+    const current = queue[0];
     setSelected(word.id);
-    const correct = word.id === current.id;
-    if (correct) { playChime(); setScore(s => s + 1); }
-    else playWrong();
-    setTimeout(() => {
-      if (idx + 1 >= queue.length) {
-        const pct = Math.round(((score + (correct ? 1 : 0)) / queue.length) * 100);
-        onComplete(pct);
+    const isFirstSeen = !seenRef.current.has(current.id);
+    seenRef.current.add(current.id);
+
+    if (word.id === current.id) {
+      playChime();
+      if (isFirstSeen) firstTryRef.current += 1;
+      if (queue.length === 1) {
+        const pct = Math.round((firstTryRef.current / totalCount) * 100);
+        setTimeout(() => { setQueue([]); onComplete(pct); }, 800);
       } else {
-        setIdx(i => i + 1);
-        setSelected(null);
-        const next = queue[idx + 1];
-        const o = shuffle(WORDS.filter(w => w.id !== next.id)).slice(0, 3);
-        setCurrentOpts(shuffle([next, ...o]));
+        setTimeout(() => {
+          setQueue(prev => prev.slice(1));
+          setRoundKey(k => k + 1);
+        }, 800);
       }
-    }, 900);
+    } else {
+      playWrong();
+      setTimeout(() => {
+        setQueue(prev => [...prev.slice(1), prev[0]]);
+        setRoundKey(k => k + 1);
+      }, 900);
+    }
   };
 
   return (
     <div className="flex flex-col items-center gap-5">
       <div className="flex justify-between w-full max-w-md">
-        <span className="font-english font-bold text-gray-600">{idx + 1} / {queue.length}</span>
-        <span className="font-english font-bold text-yellow-600">{score} ⭐</span>
+        <span className="font-english font-bold text-gray-600">✓ {mastered} / {totalCount} mastered</span>
+        {queue.length > totalCount - mastered && (
+          <span className="font-english text-sm text-orange-500 font-bold">🔄 reviewing</span>
+        )}
+      </div>
+      <div className="w-full max-w-md bg-gray-200 rounded-full h-2">
+        <div className="bg-gradient-to-r from-yellow-400 to-orange-400 h-2 rounded-full transition-all duration-500"
+          style={{ width: `${(mastered / totalCount) * 100}%` }} />
       </div>
       <div className="bg-white rounded-3xl shadow-lg p-6 text-center w-full max-w-md">
         <p className="font-english text-gray-500 text-sm mb-3">Listen and pick the correct spelling!</p>
         <button
-          onClick={() => speak(current.pronunciation)}
+          onClick={() => queue[0] && speak(queue[0].pronunciation)}
           className="tap-target bg-blue-500 text-white font-english font-bold text-xl px-8 py-4 rounded-2xl shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-2 mx-auto"
         >
           🔊 Hear the word
         </button>
       </div>
       <div className="grid grid-cols-2 gap-4 w-full max-w-md">
-        {currentOpts.map(w => {
-          const isCorrect = selected === w.id && w.id === current.id;
-          const isWrong = selected === w.id && w.id !== current.id;
-          const reveal = selected && selected !== current.id && w.id === current.id;
+        {choices.map(w => {
+          const cur = queue[0];
+          const isCorrect = selected === w.id && w.id === cur?.id;
+          const isWrong = selected === w.id && w.id !== cur?.id;
+          const reveal = selected && selected !== cur?.id && w.id === cur?.id;
           return (
             <button key={w.id} onClick={() => handlePick(w)} disabled={!!selected}
               className={`tap-target bg-white rounded-3xl p-5 shadow-md border-4 transition-all hover:scale-105 active:scale-95
@@ -91,58 +112,91 @@ function GameHearWord({ onComplete }: { onComplete: (score: number) => void }) {
 }
 
 // ── Game B: See emoji, spell the word by picking letters ──────────────────────
+// Wrong attempt → clear and retry immediately (same word stays at front).
+// Correct with no mistakes → mastered (removed). Correct after mistake → moved to end.
 
 function GameSpellIt({ onComplete }: { onComplete: (score: number) => void }) {
-  const [queue] = useState(() => shuffle(WORDS).slice(0, 6));
-  const [idx, setIdx] = useState(0);
+  const POOL = 6;
+  const [queue, setQueue] = useState<HebrewWord[]>(() => shuffle(WORDS).slice(0, POOL));
+  const [totalCount] = useState(POOL);
+  const seenRef = useRef<Set<string>>(new Set());
+  const firstTryRef = useRef(0);
+  const [hadMistake, setHadMistake] = useState(false);
   const [typed, setTyped] = useState<string[]>([]);
-  const [score, setScore] = useState(0);
   const [result, setResult] = useState<'correct' | 'wrong' | null>(null);
-  const current = queue[idx];
+  const [roundKey, setRoundKey] = useState(0);
+  const [currentBank, setCurrentBank] = useState<string[]>([]);
+
+  const mastered = totalCount - queue.length;
+  const current = queue[0];
+
+  const buildBank = useCallback((word: HebrewWord) => {
+    const letters = Array.from(word.hebrew);
+    const extras = shuffle('אבגדהוזחטיכלמנסעפצקרשת'.split('').filter(c => !letters.includes(c)))
+      .slice(0, Math.max(0, 6 - letters.length));
+    return shuffle([...letters, ...extras]);
+  }, []);
+
+  useEffect(() => {
+    if (!queue[0]) return;
+    setCurrentBank(buildBank(queue[0]));
+    setTyped([]);
+    setResult(null);
+    setHadMistake(false);
+  }, [roundKey]);
+
+  // initialise on mount
+  useEffect(() => {
+    if (queue[0]) setCurrentBank(buildBank(queue[0]));
+  }, []);
+
+  if (!current) return null;
   const targetLetters = Array.from(current.hebrew);
-
-  const shuffledBank = useCallback(() => {
-    const extras = shuffle('אבגדהוזחטיכלמנסעפצקרשת'.split('').filter(c => !targetLetters.includes(c))).slice(0, 6 - targetLetters.length);
-    return shuffle([...targetLetters, ...extras]);
-  }, [current]);
-
-  const [currentBank, setCurrentBank] = useState(shuffledBank);
 
   const addLetter = (l: string) => {
     if (typed.length >= targetLetters.length) return;
     setTyped(prev => [...prev, l]);
   };
-
   const removeLast = () => setTyped(prev => prev.slice(0, -1));
 
-  const advanceWord = (newScore: number) => {
-    const nextIdx = idx + 1;
-    if (nextIdx >= queue.length) {
-      const pct = Math.round((newScore / queue.length) * 100);
-      onComplete(pct);
-    } else {
-      setIdx(nextIdx);
-      setTyped([]);
-      setResult(null);
-      const next = queue[nextIdx];
-      const extras = shuffle('אבגדהוזחטיכלמנסעפצקרשת'.split('').filter(c => !Array.from(next.hebrew).includes(c))).slice(0, Math.max(0, 6 - Array.from(next.hebrew).length));
-      setCurrentBank(shuffle([...Array.from(next.hebrew), ...extras]));
-    }
-  };
-
   const check = () => {
-    const attempt = typed.join('');
-    const correct = attempt === current.hebrew;
+    const correct = typed.join('') === current.hebrew;
     if (correct) {
       playChime();
-      const newScore = score + 1;
-      setScore(newScore);
       setResult('correct');
-      setTimeout(() => advanceWord(newScore), 1000);
+      const isFirstSeen = !seenRef.current.has(current.id);
+      seenRef.current.add(current.id);
+      const masteredFirstTry = !hadMistake && isFirstSeen;
+      if (masteredFirstTry) firstTryRef.current += 1;
+
+      setTimeout(() => {
+        if (masteredFirstTry || (!isFirstSeen && !hadMistake)) {
+          // Mastered — remove from queue
+          if (queue.length === 1) {
+            const pct = Math.round((firstTryRef.current / totalCount) * 100);
+            setQueue([]);
+            onComplete(pct);
+          } else {
+            setQueue(prev => prev.slice(1));
+            setRoundKey(k => k + 1);
+          }
+        } else {
+          // Had a mistake — move to end for another round
+          if (queue.length === 1) {
+            // Only one word left and they got it right (after mistakes) — done
+            const pct = Math.round((firstTryRef.current / totalCount) * 100);
+            setQueue([]);
+            onComplete(pct);
+          } else {
+            setQueue(prev => [...prev.slice(1), prev[0]]);
+            setRoundKey(k => k + 1);
+          }
+        }
+      }, 900);
     } else {
       playWrong();
       setResult('wrong');
-      // Clear and let them try again — don't advance
+      setHadMistake(true);
       setTimeout(() => {
         setTyped([]);
         setResult(null);
@@ -153,8 +207,14 @@ function GameSpellIt({ onComplete }: { onComplete: (score: number) => void }) {
   return (
     <div className="flex flex-col items-center gap-5">
       <div className="flex justify-between w-full max-w-md">
-        <span className="font-english font-bold text-gray-600">{idx + 1} / {queue.length}</span>
-        <span className="font-english font-bold text-yellow-600">{score} ⭐</span>
+        <span className="font-english font-bold text-gray-600">✓ {mastered} / {totalCount} mastered</span>
+        {queue.length > totalCount - mastered && (
+          <span className="font-english text-sm text-orange-500 font-bold">🔄 reviewing</span>
+        )}
+      </div>
+      <div className="w-full max-w-md bg-gray-200 rounded-full h-2">
+        <div className="bg-gradient-to-r from-yellow-400 to-orange-400 h-2 rounded-full transition-all duration-500"
+          style={{ width: `${(mastered / totalCount) * 100}%` }} />
       </div>
       <div className="bg-white rounded-3xl shadow-lg p-6 text-center w-full max-w-md">
         <div className="text-7xl mb-2">{current.emoji}</div>
@@ -204,10 +264,7 @@ function GamePictureMatch({ onComplete }: { onComplete: (score: number) => void 
   const [confetti, setConfetti] = useState(false);
   const [done, setDone] = useState(false);
   const { speak } = useSpeech();
-
-  const words = pool;
-  const emojis = useCallback(() => shuffle(pool), []);
-  const [emojiOrder] = useState(emojis);
+  const [emojiOrder] = useState(() => shuffle(pool));
 
   const handleWord = (id: string) => {
     if (matched.has(id)) return;
@@ -253,7 +310,7 @@ function GamePictureMatch({ onComplete }: { onComplete: (score: number) => void 
       <div className="grid grid-cols-2 gap-6 w-full max-w-md">
         <div className="flex flex-col gap-3">
           <p className="font-english font-bold text-gray-500 text-xs text-center">Hebrew Words</p>
-          {words.map(w => (
+          {pool.map(w => (
             <button key={w.id} onClick={() => handleWord(w.id)} disabled={matched.has(w.id)}
               className={`tap-target bg-white rounded-2xl border-4 py-3 px-4 font-hebrew text-3xl transition-all
                 ${matched.has(w.id) ? 'opacity-30 border-gray-200' : selectedWord === w.id ? 'border-yellow-400 bg-yellow-50 scale-105 shadow-lg' : 'border-transparent shadow-md hover:border-blue-200 hover:scale-105'}`}

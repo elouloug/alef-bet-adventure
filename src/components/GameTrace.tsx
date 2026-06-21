@@ -32,7 +32,7 @@ export default function GameTrace({ letters, level, onComplete }: Props) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const fontFamily = useCursive ? '"Noto Rashi Hebrew", serif' : '"Noto Sans Hebrew", sans-serif';
+    const fontFamily = useCursive ? '"GveretLevin", "Noto Sans Hebrew", sans-serif' : '"Noto Sans Hebrew", sans-serif';
     ctx.font = `bold ${canvas.height * 0.7}px ${fontFamily}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
