@@ -57,12 +57,7 @@ function StarRow({ count, max = 3 }: { count: number; max?: number }) {
 export default function LevelSelect({ progress, onSelect }: Props) {
   const levelKeys = ['level1', 'level2', 'level3'] as const;
 
-  const isUnlocked = (num: 1 | 2 | 3) => {
-    if (num === 1) return true;
-    if (num === 2) return progress.level1.completed;
-    if (num === 3) return progress.level2.completed;
-    return false;
-  };
+  const isUnlocked = (_num: 1 | 2 | 3) => true;
 
   return (
     <div className="flex flex-col items-center gap-6 p-4 max-w-md mx-auto w-full">
@@ -79,14 +74,14 @@ export default function LevelSelect({ progress, onSelect }: Props) {
             key={level.num}
             onClick={() => unlocked && onSelect(level.num)}
             disabled={!unlocked}
-            className={`w-full rounded-3xl p-5 border-4 shadow-lg transition-all text-left
-              ${unlocked ? `${level.bg} ${level.border} hover:scale-105 active:scale-98 cursor-pointer hover:shadow-xl` : 'bg-gray-100 border-gray-200 opacity-60 cursor-not-allowed'}
+            className={`w-full rounded-3xl p-5 border-4 shadow-lg transition-all text-left cursor-pointer
+              ${level.bg} ${level.border} hover:scale-105 active:scale-98 hover:shadow-xl
               ${prog.completed ? 'ring-4 ring-green-300' : ''}
             `}
           >
             <div className="flex items-center gap-4">
               <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${level.color} flex items-center justify-center shadow-md flex-shrink-0`}>
-                <span className="text-4xl">{unlocked ? level.badge : '🔒'}</span>
+                <span className="text-4xl">{level.badge}</span>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -101,9 +96,6 @@ export default function LevelSelect({ progress, onSelect }: Props) {
                     {prog.completed && <span className="font-english text-xs font-bold text-green-600">✓ Completed!</span>}
                     {prog.score > 0 && <span className="font-english text-xs text-gray-400">Best: {prog.score}%</span>}
                   </div>
-                )}
-                {!unlocked && (
-                  <p className="font-english text-xs text-gray-400 mt-1">Complete Level {level.num - 1} with 70%+ to unlock</p>
                 )}
               </div>
             </div>

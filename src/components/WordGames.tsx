@@ -115,24 +115,39 @@ function GameSpellIt({ onComplete }: { onComplete: (score: number) => void }) {
 
   const removeLast = () => setTyped(prev => prev.slice(0, -1));
 
+  const advanceWord = (newScore: number) => {
+    const nextIdx = idx + 1;
+    if (nextIdx >= queue.length) {
+      const pct = Math.round((newScore / queue.length) * 100);
+      onComplete(pct);
+    } else {
+      setIdx(nextIdx);
+      setTyped([]);
+      setResult(null);
+      const next = queue[nextIdx];
+      const extras = shuffle('אבגדהוזחטיכלמנסעפצקרשת'.split('').filter(c => !Array.from(next.hebrew).includes(c))).slice(0, Math.max(0, 6 - Array.from(next.hebrew).length));
+      setCurrentBank(shuffle([...Array.from(next.hebrew), ...extras]));
+    }
+  };
+
   const check = () => {
     const attempt = typed.join('');
     const correct = attempt === current.hebrew;
-    if (correct) { playChime(); setScore(s => s + 1); setResult('correct'); }
-    else { playWrong(); setResult('wrong'); }
-    setTimeout(() => {
-      if (idx + 1 >= queue.length) {
-        const pct = Math.round(((score + (correct ? 1 : 0)) / queue.length) * 100);
-        onComplete(pct);
-      } else {
-        setIdx(i => i + 1);
+    if (correct) {
+      playChime();
+      const newScore = score + 1;
+      setScore(newScore);
+      setResult('correct');
+      setTimeout(() => advanceWord(newScore), 1000);
+    } else {
+      playWrong();
+      setResult('wrong');
+      // Clear and let them try again — don't advance
+      setTimeout(() => {
         setTyped([]);
         setResult(null);
-        const next = queue[idx + 1];
-        const extras = shuffle('אבגדהוזחטיכלמנסעפצקרשת'.split('').filter(c => !Array.from(next.hebrew).includes(c))).slice(0, Math.max(0, 6 - Array.from(next.hebrew).length));
-        setCurrentBank(shuffle([...Array.from(next.hebrew), ...extras]));
-      }
-    }, 1000);
+      }, 900);
+    }
   };
 
   return (
