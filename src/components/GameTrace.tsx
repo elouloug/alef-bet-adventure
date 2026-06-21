@@ -32,7 +32,8 @@ export default function GameTrace({ letters, level, onComplete }: Props) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = `bold ${canvas.height * 0.7}px "Noto Sans Hebrew", serif`;
+    const fontFamily = useCursive ? '"Noto Rashi Hebrew", serif' : '"Noto Sans Hebrew", sans-serif';
+    ctx.font = `bold ${canvas.height * 0.7}px ${fontFamily}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(107, 203, 247, 0.25)';
@@ -138,7 +139,7 @@ export default function GameTrace({ letters, level, onComplete }: Props) {
       </div>
 
       <div className="bg-white rounded-3xl shadow-lg p-6 text-center w-full max-w-md">
-        <div className="text-8xl font-hebrew leading-none mb-1" dir="rtl">
+        <div className={`text-8xl ${useCursive ? 'font-hebrew-cursive' : 'font-hebrew'} leading-none mb-1`} dir="rtl">
           {useCursive ? current.hebrewCursive : current.hebrew}
         </div>
         <p className="font-english font-bold text-2xl text-gray-700">{current.name}</p>

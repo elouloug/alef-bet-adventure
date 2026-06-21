@@ -113,7 +113,7 @@ export default function GameMatch({ letters, level, onComplete }: Props) {
               <div className={`card-face card-back rounded-2xl shadow-md border-4 flex items-center justify-center
                 ${card.matched ? 'bg-green-100 border-green-400' : 'bg-white border-yellow-300'}`}>
                 {card.type === 'hebrew' ? (
-                  <span className="font-hebrew text-4xl leading-none" dir="rtl">
+                  <span className={`${useCursive ? 'font-hebrew-cursive' : 'font-hebrew'} text-4xl leading-none`} dir="rtl">
                     {useCursive ? card.letter.hebrewCursive : card.letter.hebrew}
                   </span>
                 ) : (

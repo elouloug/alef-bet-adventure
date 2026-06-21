@@ -144,7 +144,7 @@ export default function GameHearAndPick({ letters, level, onComplete }: Props) {
                 </div>
               )}
               <span
-                className="font-hebrew text-6xl leading-tight"
+                className={`${useCursive ? 'font-hebrew-cursive' : 'font-hebrew'} text-6xl leading-tight`}
                 dir="rtl"
               >
                 {useCursive ? letter.hebrewCursive : letter.hebrew}

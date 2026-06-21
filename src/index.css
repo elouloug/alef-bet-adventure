@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;700;900&family=Nunito:wght@400;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;700;900&family=Noto+Rashi+Hebrew:wght@400;700;900&family=Nunito:wght@400;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 * {
@@ -24,6 +24,10 @@ body {
 
 .font-hebrew {
   font-family: 'Noto Sans Hebrew', sans-serif;
+}
+
+.font-hebrew-cursive {
+  font-family: 'Noto Rashi Hebrew', serif;
 }
 
 .font-english {

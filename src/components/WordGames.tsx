@@ -146,11 +146,12 @@ function GameSpellIt({ onComplete }: { onComplete: (score: number) => void }) {
         <p className="font-english font-bold text-xl text-gray-700">{current.meaning}</p>
         <p className="font-english text-gray-400 text-sm">Spell it in Hebrew!</p>
       </div>
-      <div className="flex gap-3 justify-center min-h-16 items-center">
+      <div className="flex gap-3 justify-center min-h-16 items-center" dir="rtl">
         {typed.map((l, i) => (
           <div key={i} className={`w-14 h-14 flex items-center justify-center rounded-2xl border-4 font-hebrew text-3xl
-            ${result === 'correct' ? 'border-green-400 bg-green-50' : result === 'wrong' ? 'border-red-400 bg-red-50' : 'border-yellow-400 bg-yellow-50'}`}
-            dir="rtl">{l}</div>
+            ${result === 'correct' ? 'border-green-400 bg-green-50' : result === 'wrong' ? 'border-red-400 bg-red-50' : 'border-yellow-400 bg-yellow-50'}`}>
+            {l}
+          </div>
         ))}
         {Array.from({ length: targetLetters.length - typed.length }).map((_, i) => (
           <div key={i} className="w-14 h-14 rounded-2xl border-4 border-dashed border-gray-300 bg-gray-50" />
