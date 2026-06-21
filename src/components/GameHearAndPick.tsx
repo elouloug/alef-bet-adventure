@@ -28,19 +28,19 @@ export default function GameHearAndPick({ letters, level, onComplete }: Props) {
   const { speak } = useSpeech();
   const useCursive = level === 'level2';
 
-  // Queue: queue[0] is always the current question.
-  // Correct → remove from front. Wrong → move from front to back.
   const [queue, setQueue] = useState<Letter[]>(() =>
     shuffle(letters).slice(0, Math.min(letters.length, POOL_SIZE))
   );
   const [totalCount] = useState(Math.min(letters.length, POOL_SIZE));
   const seenRef = useRef<Set<string>>(new Set());
   const firstTryRef = useRef(0);
+  const hadMistakeRef = useRef(false);
 
   const [choices, setChoices] = useState<Letter[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [correctId, setCorrectId] = useState<string | null>(null); // set only on correct tap
   const [shaking, setShaking] = useState<string | null>(null);
-  const [showBurst, setShowBurst] = useState<string | null>(null);
+  const [isAnimating, setIsAnimating] = useState(false); // briefly blocks input after wrong tap
+  const [, setShowBurst] = useState<string | null>(null);
   const [roundKey, setRoundKey] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [finalStars, setFinalStars] = useState(0);
@@ -48,53 +48,74 @@ export default function GameHearAndPick({ letters, level, onComplete }: Props) {
 
   const mastered = totalCount - queue.length;
 
-  // Re-generate choices and speak whenever we move to a new round
+  // Set up new choices whenever we move to a new letter
   useEffect(() => {
     const cur = queue[0];
     if (!cur) return;
     const wrong = shuffle(letters.filter(l => l.id !== cur.id)).slice(0, 3);
     setChoices(shuffle([cur, ...wrong]));
-    setSelected(null);
+    setCorrectId(null);
     setShowBurst(null);
+    hadMistakeRef.current = false;
     setTimeout(() => speak(cur.pronunciation), 300);
   }, [roundKey]);
 
   const handlePick = (letter: Letter) => {
-    if (selected || !queue[0]) return;
+    if (correctId || isAnimating || !queue[0]) return;
     const current = queue[0];
-    setSelected(letter.id);
-
-    const isFirstSeen = !seenRef.current.has(current.id);
-    seenRef.current.add(current.id);
 
     if (letter.id === current.id) {
+      // ✓ Correct
       playChime();
       setShowBurst(letter.id);
-      if (isFirstSeen) firstTryRef.current += 1;
+      setCorrectId(letter.id);
 
-      if (queue.length === 1) {
-        // Last one — all mastered!
-        const pct = Math.round((firstTryRef.current / totalCount) * 100);
-        const stars = pct >= 90 ? 3 : pct >= 70 ? 2 : 1;
-        setFinalStars(stars);
-        setMessage(ENCOURAGING[Math.floor(Math.random() * ENCOURAGING.length)]);
-        setTimeout(() => { setQueue([]); setShowModal(true); }, 900);
-      } else {
-        setTimeout(() => {
-          setQueue(prev => prev.slice(1));
-          setRoundKey(k => k + 1);
-        }, 800);
-      }
+      const isFirstSeen = !seenRef.current.has(current.id);
+      seenRef.current.add(current.id);
+      if (!hadMistakeRef.current && isFirstSeen) firstTryRef.current += 1;
+
+      const advance = () => {
+        if (hadMistakeRef.current) {
+          // Had mistakes this round → send to end for one more clean pass
+          if (queue.length === 1) {
+            finish();
+          } else {
+            setQueue(prev => [...prev.slice(1), prev[0]]);
+            setRoundKey(k => k + 1);
+          }
+        } else {
+          // Clean → mastered
+          if (queue.length === 1) {
+            finish();
+          } else {
+            setQueue(prev => prev.slice(1));
+            setRoundKey(k => k + 1);
+          }
+        }
+      };
+
+      setTimeout(advance, 900);
     } else {
+      // ✗ Wrong — shake and stay on the same letter
       playWrong();
+      hadMistakeRef.current = true;
+      seenRef.current.add(current.id);
       setShaking(letter.id);
-      setTimeout(() => setShaking(null), 500);
-      // Move to end of queue
+      setIsAnimating(true);
       setTimeout(() => {
-        setQueue(prev => [...prev.slice(1), prev[0]]);
-        setRoundKey(k => k + 1);
-      }, 900);
+        setShaking(null);
+        setIsAnimating(false);
+      }, 500);
     }
+  };
+
+  const finish = () => {
+    const pct = Math.round((firstTryRef.current / totalCount) * 100);
+    const stars = pct >= 90 ? 3 : pct >= 70 ? 2 : 1;
+    setFinalStars(stars);
+    setMessage(ENCOURAGING[Math.floor(Math.random() * ENCOURAGING.length)]);
+    setQueue([]);
+    setShowModal(true);
   };
 
   const handleFinish = () => {
@@ -133,26 +154,23 @@ export default function GameHearAndPick({ letters, level, onComplete }: Props) {
 
       <div className="grid grid-cols-2 gap-4 w-full max-w-md">
         {choices.map(letter => {
-          const isCorrect = selected === letter.id && letter.id === queue[0]?.id;
-          const isWrong = selected === letter.id && letter.id !== queue[0]?.id;
-          const reveal = selected && selected !== queue[0]?.id && letter.id === queue[0]?.id;
+          const isCorrect = correctId === letter.id;
+          const isWrong = shaking === letter.id;
           return (
             <button
               key={letter.id}
               onClick={() => handlePick(letter)}
-              disabled={!!selected}
+              disabled={!!correctId || isAnimating}
               className={`
                 tap-target relative flex flex-col items-center justify-center bg-white rounded-3xl p-6 shadow-md
-                transition-all duration-200 hover:scale-105 active:scale-95 border-4
+                transition-all duration-200 border-4
                 ${isCorrect ? 'border-green-400 bg-green-50 scale-105' : ''}
-                ${isWrong ? 'border-red-400 bg-red-50' : ''}
-                ${reveal ? 'border-green-400 bg-green-50' : ''}
-                ${!selected ? 'border-transparent hover:border-blue-200' : ''}
-                ${shaking === letter.id ? 'animate-shake' : ''}
+                ${isWrong ? 'border-red-400 bg-red-50 animate-shake' : ''}
+                ${!correctId && !isWrong ? 'border-transparent hover:border-blue-200 hover:scale-105 active:scale-95' : ''}
               `}
             >
-              {showBurst === letter.id && (
-                <div className="absolute inset-0 flex items-center justify-center">
+              {isCorrect && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="text-4xl animate-star-burst">⭐</div>
                 </div>
               )}
